@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alien Lunar: Captura de Vacas</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #1a1a2e;
+            font-family: 'Arial', sans-serif;
+            color: #ffffff;
+            touch-action: manipulation;
+        }
+
+        .game-container {
+            text-align: center;
+            position: relative;
+        }
+
+        #gameCanvas {
+            width: 800px;
+            height: 450px;
+            background: #1a1a2e;
+            border: 3px solid #4CC9F0;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(76, 201, 240, 0.3);
+        }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        #startGameBtn {
+            background: #4CC9F0;
+            color: #1a1a2e;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        #startGameBtn:hover {
+            background: #7209b7;
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(114, 9, 183, 0.5);
+        }
+
+        #gameScore {
+            font-size: 20px;
+            color: #4CC9F0;
+            text-shadow: 0 0 10px rgba(76, 201, 240, 0.5);
+            padding: 8px 15px;
+            border-radius: 5px;
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        #lives {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 24px;
+            color: #FF0000;
+            text-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+        }
+
+        p {
+            font-size: 14px;
+            margin: 5px 0;
+            color: #a0a0a0;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="lives">❤️❤️❤️</div>
+        <div class="controls">
+            <button id="startGameBtn">🚀 Iniciar Juego</button>
+            <p>Controles: ← → para mover | Espacio para saltar | W para capturar</p>
+            <div id="gameScore">Puntuación: 0</div>
+        </div>
+    </div>
+
+<script>
+class AlienGame {
+    constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.width = 800;
+        this.height = 450;
+        this.player = {
+            x: this.width / 2,
+            y: this.height - 100,
+            width: 40,
+            height: 60,
+            speed: 6,
+            dy: 0,
+            gravity: 0.3,
+            jumpPower: -9.5,
+            grounded: true,
+            tractorBeam: false,
+            tractorRange: 150,
+            tractorCooldown: 0
+        };
+        this.cows = [];
+        this.ufo = {
+            x: this.width / 2,
+            y: 30,
+            width: 100,
+            height: 50,
+            speed: 3,
+            angle: 0,
+            direction: 1
+        };
+        this.stars = [];
+        this.score = 0;
+        this.level = 1;
+        this.lives = 3;
+        this.keys = {};
+        this.gameRunning = false;
+        this.gameOver = false;
+        this.init();
+    }
+
+    init() {
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
+        this.generateStars(80);
+        this.setupControls();
+        document.getElementById('startGameBtn').addEventListener('click', () => this.startGame());
+    }
+
+    generateStars(count) {
+        for (let i = 0; i < count; i++) {
+            this.stars.push({
+                x: Math.random() * this.width,
+                y: Math.random() * (this.height - 100),
+                size: Math.random() * 2 + 1,
+                alpha: Math.random() * 0.4 + 0.3,
+                twinkle: Math.random() * 0.05
+            });
+        }
+    }
+
+    setupControls() {
+        const handleKey = (e, state) => {
+            if (['ArrowLeft', 'ArrowRight', ' ', 'w'].includes(e.key)) {
+                e.preventDefault();
+                this.keys[e.key] = state;
+            }
+        };
+        
+        document.addEventListener('keydown', (e) => handleKey(e, true));
+        document.addEventListener('keyup', (e) => handleKey(e, false));
+        
+        // Controles táctiles
+        this.canvas.addEventListener('touchstart', (e) => {
+            const touchX = e.touches[0].clientX - this.canvas.getBoundingClientRect().left;
+            if (touchX < this.canvas.width / 2) this.keys['ArrowLeft'] = true;
+            else this.keys['ArrowRight'] = true;
+            this.keys[' '] = true;
+            e.preventDefault();
+        });
+        
+        document.addEventListener('touchend', () => {
+            this.keys['ArrowLeft'] = false;
+            this.keys['ArrowRight'] = false;
+            this.keys[' '] = false;
+        });
+    }
+
+    startGame() {
+        if (!this.gameRunning) {
+            this.gameRunning = true;
+            this.gameOver = false;
+            this.score = 0;
+            this.level = 1;
+            this.lives = 3;
+            this.player.x = this.width / 2;
+            this.player.y = this.height - 100;
+            this.player.dy = 0;
+            this.cows = [];
+            this.ufo.speed = 3;
+            document.getElementById('lives').textContent = '❤️❤️❤️';
+            document.getElementById('gameScore').textContent = 'Puntuación: 0';
+            this.gameLoop();
+        }
+    }
+
+    spawnCow() {
+        if (Math.random() < 0.025 + (this.level * 0.005)) {
+            this.cows.push({
+                x: this.ufo.x + this.ufo.width/2 - 15,
+                y: this.ufo.y + this.ufo.height,
+                width: 30,
+                height: 40,
+                dy: 2 + (this.level * 0.2),
+                captured: false,
+                type: Math.random() < 0.1 ? 'gold' : 'normal'
+            });
+        }
+    }
+
+    update() {
+        if (this.gameOver) return;
+
+        // Movimiento del jugador
+        if (this.keys['ArrowLeft']) this.player.x = Math.max(0, this.player.x - this.player.speed);
+        if (this.keys['ArrowRight']) this.player.x = Math.min(this.width - this.player.width, this.player.x + this.player.speed);
+        
+        // Salto
+        if (this.keys[' '] && this.player.grounded) {
+            this.player.dy = this.player.jumpPower;
+            this.player.grounded = false;
+        }
+
+        // Gravedad
+        this.player.dy += this.player.gravity;
+        this.player.y += this.player.dy;
+        
+        // Colisión con el suelo
+        if (this.player.y > this.height - this.player.height - 20) {
+            this.player.y = this.height - this.player.height - 20;
+            this.player.dy = 0;
+            this.player.grounded = true;
+        }
+
+        // Movimiento del UFO
+        this.ufo.x += this.ufo.speed * this.ufo.direction;
+        this.ufo.angle += 0.06;
+        if (this.ufo.x < 0 || this.ufo.x > this.width - this.ufo.width) {
+            this.ufo.direction *= -1;
+            this.ufo.speed = Math.min(6, this.ufo.speed + 0.2);
+        }
+
+        // Generar vacas
+        this.spawnCow();
+
+        // Actualizar vacas
+        this.cows.forEach((cow, index) => {
+            if (!cow.captured) cow.y += cow.dy;
+            
+            // Colisión con el suelo
+            if (cow.y > this.height - 30) {
+                this.cows.splice(index, 1);
+                if (!cow.captured) {
+                    this.lives--;
+                    document.getElementById('lives').textContent = '❤️'.repeat(this.lives) + '♡'.repeat(3 - this.lives);
+                    
+                    if (this.lives <= 0) {
+                        this.gameOver = true;
+                        this.gameRunning = false;
+                    }
+                }
+            }
+            
+            // Colisión con jugador
+            const distance = Math.hypot(
+                this.player.x + this.player.width/2 - (cow.x + cow.width/2),
+                this.player.y + this.player.height/2 - (cow.y + cow.height/2)
+            );
+            
+            if (distance < 35) {
+                this.score += cow.type === 'gold' ? 50 : 10;
+                document.getElementById('gameScore').textContent = `Puntuación: ${this.score}`;
+                this.cows.splice(index, 1);
+            }
+
+            // Captura con rayo tractor
+            if (this.keys['w'] && this.player.tractorCooldown <= 0) {
+                const beamX = this.player.x + this.player.width/2;
+                const beamY = this.player.y - this.player.tractorRange;
+                
+                if (cow.x < beamX + 20 && cow.x > beamX - 20 && cow.y > beamY) {
+                    cow.captured = true;
+                    cow.x += (beamX - cow.x) * 0.1;
+                    cow.y -= 2;
+                    
+                    if (Math.abs(cow.y - this.player.y) < 30) {
+                        this.score += cow.type === 'gold' ? 100 : 20;
+                        this.cows.splice(index, 1);
+                        this.player.tractorCooldown = 30;
+                        document.getElementById('gameScore').textContent = `Puntuación: ${this.score}`;
+                    }
+                }
+            }
+        });
+
+        // Actualizar nivel
+        if (this.score >= this.level * 100) {
+            this.level++;
+            this.player.speed = Math.min(8, this.player.speed + 0.2);
+        }
+    }
+
+    draw() {
+        this.ctx.clearRect(0, 0, this.width, this.height);
+        
+        // Fondo estrellado
+        this.stars.forEach(star => {
+            star.alpha += (Math.random() - 0.5) * star.twinkle;
+            star.alpha = Math.max(0.3, Math.min(0.8, star.alpha));
+            this.ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha})`;
+            this.ctx.beginPath();
+            this.ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+            this.ctx.fill();
+        });
+
+        // Suelo lunar
+        this.ctx.fillStyle = '#444';
+        this.ctx.fillRect(0, this.height - 20, this.width, 20);
+        
+        // UFO
+        this.ctx.save();
+        this.ctx.translate(this.ufo.x + this.ufo.width/2, this.ufo.y + this.ufo.height/2);
+        this.ctx.rotate(Math.sin(this.ufo.angle) * 0.15);
+        this.ctx.fillStyle = '#4CC9F0';
+        this.ctx.beginPath();
+        this.ctx.ellipse(0, 0, this.ufo.width/2, this.ufo.height/2, 0, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+        this.ctx.beginPath();
+        this.ctx.arc(0, -5, 15, 0, Math.PI);
+        this.ctx.fill();
+        this.ctx.restore();
+
+        // Jugador
+        this.ctx.fillStyle = '#4CC9F0';
+        this.ctx.beginPath();
+        this.ctx.arc(this.player.x + 20, this.player.y, 20, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.fillStyle = '#7209B7';
+        this.ctx.fillRect(this.player.x + 5, this.player.y + 20, 10, 40);
+        this.ctx.fillRect(this.player.x, this.player.y + 50, 30, 10);
+
+        // Vacas
+        this.cows.forEach(cow => {
+            this.ctx.save();
+            this.ctx.translate(cow.x + 15, cow.y + 20);
+            this.ctx.fillStyle = cow.type === 'gold' ? '#FFD700' : '#FFF';
+            this.ctx.beginPath();
+            this.ctx.ellipse(0, 0, 15, 20, 0, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.fillStyle = '#666';
+            this.ctx.beginPath();
+            this.ctx.arc(-8, -5, 3, 0, Math.PI * 2);
+            this.ctx.arc(8, 2, 4, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.restore();
+        });
+
+        // UI
+        this.ctx.fillStyle = '#4CC9F0';
+        this.ctx.font = '20px Arial';
+        this.ctx.fillText(`Puntuación: ${this.score}`, 10, 30);
+        this.ctx.fillText(`Nivel: ${this.level}`, 10, 60);
+
+        // Game Over
+        if (this.gameOver) {
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+            this.ctx.fillStyle = '#FF0000';
+            this.ctx.font = '60px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('¡GAME OVER!', this.width/2, this.height/2 - 30);
+            this.ctx.font = '30px Arial';
+            this.ctx.fillText(`Puntuación final: ${this.score}`, this.width/2, this.height/2 + 20);
+            this.ctx.fillText('Toca para reiniciar', this.width/2, this.height/2 + 70);
+            this.ctx.textAlign = 'left';
+        }
+    }
+
+    gameLoop() {
+        if (this.gameRunning) {
+            this.update();
+            this.draw();
+            requestAnimationFrame(() => this.gameLoop());
+        }
+    }
+}
+
+// Iniciar el juego
+const game = new AlienGame('gameCanvas');
+
+// Evento para reiniciar con clic/touch
+document.addEventListener('click', () => {
+    if (game.gameOver || !game.gameRunning) {
+        game.startGame();
+    }
+});
+</script>
+</body>
+</html>
